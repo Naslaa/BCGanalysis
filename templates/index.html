@@ -1,0 +1,150 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Financial Chatbot</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 600px;
+            margin: 2rem auto;
+            padding: 1rem;
+            background-color: #f4f4f4;
+            border-radius: 8px;
+        }
+
+        label, select, input {
+            margin-top: 1rem;
+            display: block;
+            width: 100%;
+        }
+
+        button {
+            margin-top: 1rem;
+            padding: 0.5rem 1rem;
+            background-color: #007bff;
+            color: white;
+            border: none;
+            border-radius: 5px;
+        }
+
+        .response {
+            margin-top: 2rem;
+            padding: 1rem;
+            background: white;
+            border-left: 5px solid #007bff;
+        }
+    </style>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+
+</head>
+<body>
+    <h2>Financial Chatbot</h2>
+
+    <label for="company">Company:</label>
+    <input type="text" id="company" placeholder="e.g., Apple">
+
+    <label for="year">Year:</label>
+    <input type="number" id="year" placeholder="e.g., 2024">
+
+    <label for="query">Question:</label>
+    <select id="query">
+        <option value="What is the total revenue?">What is the total revenue?</option>
+        <option value="How has net income changed over the last year?">How has net income changed over the last year?</option>
+        <option value="What is the cash flow from operating activities?">What is the cash flow from operating activities?</option>
+        <option value="What are the total assets and liabilities?">What are the total assets and liabilities?</option>
+    </select>
+
+    <button onclick="askBot()">Ask</button>
+
+    <div id="result" class="response" style="display:none;"></div>
+    <canvas id="chart1" width="600" height="300" style="margin-top: 2rem;"></canvas>
+    <canvas id="chart2" width="600" height="300" style="margin-top: 2rem; display: none;"></canvas>
+
+<script>
+    const chartInstances = {};
+
+    async function renderChart(company, metric, canvasId) {
+        const res = await fetch(`/chart-data?company=${company}&metric=${encodeURIComponent(metric)}`);
+        const data = await res.json();
+
+        if (data.error) return;
+
+        const canvas = document.getElementById(canvasId);
+        if (!canvas) return;
+
+        const ctx = canvas.getContext("2d");
+
+        // Destroy existing chart if present
+        if (chartInstances[canvasId]) {
+            chartInstances[canvasId].destroy();
+        }
+
+        // Show canvas
+        canvas.style.display = "block";
+
+        chartInstances[canvasId] = new Chart(ctx, {
+            type: "line",
+            data: {
+                labels: data.years,
+                datasets: [{
+                    label: data.label,
+                    data: data.values,
+                    borderColor: canvasId === "chart1" ? "blue" : "green",
+                    fill: false,
+                    tension: 0.2
+                }]
+            },
+            options: {
+                responsive: true,
+                scales: {
+                    y: {
+                        beginAtZero: false
+                    }
+                }
+            }
+        });
+    }
+
+    async function askBot() {
+        const company = document.getElementById("company").value;
+        const year = document.getElementById("year").value;
+        const query = document.getElementById("query").value;
+
+        const response = await fetch(`/chat?company=${company}&year=${year}&query=${encodeURIComponent(query)}`);
+        const data = await response.json();
+
+        const resultDiv = document.getElementById("result");
+        resultDiv.style.display = "block";
+        resultDiv.innerText = data.response;
+
+        // Hide both charts by default
+        document.getElementById("chart1").style.display = "none";
+        document.getElementById("chart2").style.display = "none";
+
+        // Destroy both charts if they exist
+        if (chartInstances["chart1"]) {
+            chartInstances["chart1"].destroy();
+            delete chartInstances["chart1"];
+        }
+        if (chartInstances["chart2"]) {
+            chartInstances["chart2"].destroy();
+            delete chartInstances["chart2"];
+        }
+
+        // Logic for charts
+        if (query.includes("revenue")) {
+            await renderChart(company, "Total Revenue", "chart1");
+        } else if (query.includes("net income")) {
+            await renderChart(company, "Net Income", "chart1");
+        } else if (query.includes("cash flow")) {
+            await renderChart(company, "Cash Flow", "chart1");
+        } else if (query.includes("assets") || query.includes("liabilities")) {
+            await renderChart(company, "Total Assets", "chart1");
+            await renderChart(company, "Total Liabilities", "chart2");
+        }
+    }
+</script>
+
+</body>
+</html>
